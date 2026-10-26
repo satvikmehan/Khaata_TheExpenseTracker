@@ -1,0 +1,152 @@
+# ==============================================================================
+# Flutter / Dart / Pub
+# ==============================================================================
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+build/
+coverage/
+**/doc/api/
+.fvm/
+
+# Symbolication & Obfuscation
+app.*.symbols
+app.*.map.json
+
+# ==============================================================================
+# Firebase & Google Cloud Credentials (Sensitive)
+# ==============================================================================
+**/android/app/google-services.json
+**/ios/Runner/GoogleService-Info.plist
+**/macos/Runner/GoogleService-Info.plist
+lib/firebase_options.dart
+!lib/firebase_options.example.dart
+!**/android/app/google-services.json.example
+!**/ios/Runner/GoogleService-Info.plist.example
+
+# Firebase CLI debug logs & cache
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+.firebase/
+
+# ==============================================================================
+# Android Signing, Keystores & Local Properties
+# ==============================================================================
+**/android/local.properties
+local.properties
+**/key.properties
+key.properties
+**/signing.properties
+signing.properties
+
+# Keystores & Certificates
+*.keystore
+*.jks
+*.p8
+*.p12
+*.pem
+*.key
+
+# Android build outputs & gradle cache
+.gradle/
+**/android/.gradle/
+android/app/debug
+android/app/profile
+android/app/release
+captures/
+
+# ==============================================================================
+# Environment Variables & Secret Files
+# ==============================================================================
+.env
+.env.*
+*.env
+!.env.example
+secrets.json
+credentials.json
+service_account.json
+serviceAccountKey.json
+
+# ==============================================================================
+# iOS & macOS (Xcode, CocoaPods, Ephemeral)
+# ==============================================================================
+**/ios/Flutter/.last_build_id
+**/ios/Flutter/ephemeral/
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/app.flx
+**/ios/Flutter/app.zip
+**/ios/Flutter/flutter_assets/
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
+**/ios/Pods/
+**/ios/.symlinks/
+**/macos/Pods/
+**/macos/Flutter/ephemeral/
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+*.mode1v3
+*.mode2v3
+*.moved-aside
+*.pbxuser
+*.perspectivev3
+*.xcuserstate
+xcuserdata/
+**/DerivedData/
+
+# ==============================================================================
+# Windows & Linux Platform Ephemerals
+# ==============================================================================
+windows/flutter/ephemeral/
+windows/flutter/generated_plugin_registrant.cc
+windows/flutter/generated_plugins.cmake
+windows/runner/Release/
+windows/runner/Debug/
+linux/flutter/ephemeral/
+linux/flutter/generated_plugin_registrant.cc
+linux/flutter/generated_plugins.cmake
+
+# ==============================================================================
+# IDEs and Editors
+# ==============================================================================
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.code-workspace
+.history/
+.atom/
+
+# ==============================================================================
+# Operating System & Temporary Files
+# ==============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.swp
+*.swo
+*~
+*.bak
+*.tmp
+*.class
+*.pyc
+
+# ==============================================================================
+# Log Files
+# ==============================================================================
+*.log
+flutter_*.log
