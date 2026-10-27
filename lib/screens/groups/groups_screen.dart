@@ -1,4 +1,3 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/group_model.dart';
@@ -9,26 +8,10 @@ import '../../widgets/empty_state.dart';
 import '../expense/expense_home_screen.dart';
 import 'create_group_screen.dart';
 import 'join_group_screen.dart';
+import '../udhaar/udhaar_screen.dart';
 
-class LongerHoldDragStartListener extends ReorderableDragStartListener {
-  final Duration delay;
-
-  const LongerHoldDragStartListener({
-    super.key,
-    required super.child,
-    required super.index,
-    super.enabled,
-    this.delay = const Duration(milliseconds: 1000),
-  });
-
-  @override
-  MultiDragGestureRecognizer createRecognizer() {
-    return DelayedMultiDragGestureRecognizer(
-      delay: delay,
-      debugOwner: this,
-    );
-  }
-}
+import '../../widgets/longer_hold_drag_start_listener.dart';
+export '../../widgets/longer_hold_drag_start_listener.dart';
 
 class GroupsScreen extends StatefulWidget {
   const GroupsScreen({super.key});
@@ -196,6 +179,17 @@ class _GroupsScreenState extends State<GroupsScreen> {
           appBar: AppBar(
             title: const Text('Khaata'),
             actions: [
+              IconButton(
+                tooltip: 'Udhaar',
+                icon: const Icon(Icons.menu_book_rounded, size: 21),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const UdhaarScreen(),
+                    ),
+                  );
+                },
+              ),
               IconButton(
                 tooltip: 'Log Out',
                 icon: const Icon(Icons.logout_outlined, size: 20),

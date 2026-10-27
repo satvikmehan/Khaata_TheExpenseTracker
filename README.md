@@ -35,19 +35,30 @@ A minimal, real-time shared expense tracker and room ledger built with Flutter a
   $$\text{Pending Cash} = \sum(\text{Deposits}) - \sum(\text{Withdrawals})$$
 - Quick operations: **`[ + DEPOSIT ]`** and **`[ - WITHDRAW ]`** with live balance updates.
 
-### 5. Month Completion & Two-Way Swap/Restore
+### 5. Udhaar Tab (Personal Credit & Debit Ledger)
+- Accessible via the **Udhaar** icon directly on the left of the Log Out button on the front screen.
+- **Vertical Contact List**: Add persons with an initial zero balance (`₹0`).
+- **Interactive Quick-Signs**: Front screen shows the person's name on the left and the net amount left between `[-]` and `[+]` buttons.
+- **Color Coded Balances**:
+  - **Green** for positive balances (money owed to you)
+  - **Red** for negative balances (money you owe)
+  - **Black** for zero (`₹0`)
+- **Quick Modals**: Clicking `+` or `-` prompts for Amount, Note, and Date to instantly update the running total.
+- **Transaction History**: Tap any person's name to view their full transaction ledger with dates, descriptions, and delete options.
+
+### 6. Month Completion & Two-Way Swap/Restore
 - **Done For This List**: Mark the active month finished to lock its ledger into history.
 - **Automatic Rollover**: Automatically initializes the next calendar month at `₹0.00`.
 - **Two-Way Restore**: Accidentally closed a month? Restore any archived month back to the active front screen with a single tap, swapping the current list into the archive automatically.
 - **Past Month Editing**: Modify or add missed receipts to previous months anytime.
 
-### 6. Seamless Authentication & Privacy
+### 7. Seamless Authentication & Privacy
 - **Google Sign-In & Phone OTP**: Fast login with Google or SMS verification code.
 - **No-Flicker Session Restoration**: Remembers logged-in users and transitions immediately to the front screen without flashing the login screen.
 - **Clean Profile Customization**: Tap your name on the front screen to edit your display name. Phone numbers and email addresses remain hidden for privacy.
 - **One-Time Welcome Prompt**: Brand new accounts are automatically prompted once for their name.
 
-### 7. Export & Sharing
+### 8. Export & Sharing
 - **CSV Export**: Export any active or historical monthly ledger to CSV format with a complete mathematical summary.
 
 ---

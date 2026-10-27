@@ -15,10 +15,14 @@ import 'package:expense_tracker/services/auth_service.dart';
 import 'package:expense_tracker/services/expense_service.dart';
 import 'package:expense_tracker/services/export_service.dart';
 import 'package:expense_tracker/services/group_service.dart';
+import 'package:expense_tracker/screens/udhaar/udhaar_screen.dart';
+import 'package:expense_tracker/screens/udhaar/udhaar_detail_screen.dart';
+import 'package:expense_tracker/services/udhaar_service.dart';
 
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    UdhaarService.instance.clearMockData();
   });
   testWidgets('Khaata app loads phone sign-in screen initially with Google sign-in option', (WidgetTester tester) async {
     // Ensure clean logged-out state
@@ -695,4 +699,182 @@ void main() {
 
     await AuthService.instance.logOut();
   });
+
+  testWidgets('Udhaar tab icon is on left of logout button and opens UdhaarScreen where users add persons vertically', (WidgetTester tester) async {
+    await AuthService.instance.logOut();
+    await AuthService.instance.sendOtp(rawPhoneNumber: '9555544444', onCodeSent: (_) {}, onError: (_) {});
+    final user = await AuthService.instance.verifyOtpAndSignIn(smsCode: '123456', name: 'UdhaarUser');
+    expect(user.name, 'UdhaarUser');
+
+    await tester.pumpWidget(const ExpenseTrackerApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Verify Udhaar button and Log Out button exist in AppBar
+    final udhaarIconFinder = find.byTooltip('Udhaar');
+    final logOutIconFinder = find.byTooltip('Log Out');
+    expect(udhaarIconFinder, findsOneWidget);
+    expect(logOutIconFinder, findsOneWidget);
+
+    // Verify Udhaar icon is positioned to the left of the Log Out icon
+    final udhaarPos = tester.getTopLeft(udhaarIconFinder);
+    final logOutPos = tester.getTopLeft(logOutIconFinder);
+    expect(udhaarPos.dx, lessThan(logOutPos.dx));
+
+    // Tap the Udhaar icon to navigate to UdhaarScreen
+    await tester.tap(udhaarIconFinder);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(UdhaarScreen), findsOneWidget);
+    expect(find.text('Udhaar'), findsOneWidget);
+    expect(find.text('No Udhaar contacts yet'), findsOneWidget);
+
+    // Add a person (e.g. Rahul)
+    await tester.tap(find.text('Add Person').first);
+    await tester.pumpAndSettle();
+
+    // Type person name
+    await tester.enterText(find.byType(TextField), 'Rahul Sharma');
+    await tester.pump();
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+
+    // Verify person is stored vertically with initial amount ₹0 in black between - and + signs
+    expect(find.text('Rahul Sharma'), findsOneWidget);
+    expect(find.text('₹0'), findsOneWidget);
+    expect(find.byIcon(Icons.remove), findsOneWidget);
+    expect(find.byIcon(Icons.add), findsWidgets);
+
+    // Check color of initial ₹0 is black (Color(0xFF0F172A))
+    final initialZeroText = tester.widget<Text>(find.text('₹0'));
+    expect(initialZeroText.style?.color, const Color(0xFF0F172A));
+
+    await AuthService.instance.logOut();
+  });
+
+  testWidgets('Udhaar: + and - transactions update amount left between signs with color rules and name opens transaction history', (WidgetTester tester) async {
+    await AuthService.instance.logOut();
+    await AuthService.instance.sendOtp(rawPhoneNumber: '9444433333', onCodeSent: (_) {}, onError: (_) {});
+    final user = await AuthService.instance.verifyOtpAndSignIn(smsCode: '123456', name: 'Lender');
+
+    // Pre-create person in Udhaar
+    final person = await UdhaarService.instance.addPerson(userId: user.id, name: 'Aman Verma');
+    expect(person.name, 'Aman Verma');
+
+    await tester.pumpWidget(const ExpenseTrackerApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Open Udhaar Screen
+    await tester.tap(find.byTooltip('Udhaar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Aman Verma'), findsOneWidget);
+    expect(find.text('₹0'), findsOneWidget);
+
+    // Click [+] on the front screen for Aman Verma
+    await tester.tap(find.byIcon(Icons.add).first);
+    await tester.pumpAndSettle();
+
+    // Verify pop-up dialog with amount, note, date appears
+    expect(find.text('Debt Given (+)'), findsOneWidget);
+    expect(find.text('Person: Aman Verma'), findsOneWidget);
+
+    // Enter amount: 500, note: Dinner split
+    final textFields = find.byType(TextField);
+    await tester.enterText(textFields.at(0), '500');
+    await tester.enterText(textFields.at(1), 'Dinner split');
+    await tester.pump();
+
+    // Click Record Given Debt button in modal
+    await tester.tap(find.text('Record Given Debt'));
+    await tester.pumpAndSettle();
+
+    // Verify front screen now shows amount left: ₹500 in green
+    expect(find.text('₹500'), findsOneWidget);
+    final positiveText = tester.widget<Text>(find.text('₹500'));
+    expect(positiveText.style?.color, const Color(0xFF16A34A)); // Green
+
+    // Click [-] on the front screen to reduce total
+    await tester.tap(find.byIcon(Icons.remove).first);
+    await tester.pumpAndSettle();
+
+    // Verify pop-up dialog for deduct / received
+    expect(find.text('Debt Taken / Received (-)'), findsOneWidget);
+    final deductTextFields = find.byType(TextField);
+    // Deduct 700 so total becomes -200 (negative)
+    await tester.enterText(deductTextFields.at(0), '700');
+    await tester.enterText(deductTextFields.at(1), 'Returned extra');
+    await tester.pump();
+    await tester.tap(find.text('Record Received / Taken'));
+    await tester.pumpAndSettle();
+
+    // Verify front screen now shows negative amount -₹200 in RED
+    expect(find.text('-₹200'), findsOneWidget);
+    final negativeText = tester.widget<Text>(find.text('-₹200'));
+    expect(negativeText.style?.color, const Color(0xFFDC2626)); // Red
+
+    // Click person name to access history of transactions
+    await tester.tap(find.text('Aman Verma'));
+    await tester.pumpAndSettle();
+
+    // Verify UdhaarDetailScreen opens with updated headings
+    expect(find.byType(UdhaarDetailScreen), findsOneWidget);
+    expect(find.text('YOU WILL PAY (NET)'), findsOneWidget);
+    expect(find.text('Debt Given (+)'), findsWidgets);
+    expect(find.text('Debt Taken / Received (-)'), findsWidgets);
+    expect(find.text('History of Transactions'), findsOneWidget);
+    expect(find.text('Dinner split'), findsOneWidget);
+    expect(find.text('Returned extra'), findsOneWidget);
+    expect(find.text('+₹500'), findsWidgets);
+    expect(find.text('-₹700'), findsWidgets);
+
+    await AuthService.instance.logOut();
+  });
+
+  testWidgets('UdhaarScreen allows rearranging persons by long holding and preserves order across app restarts', (WidgetTester tester) async {
+    await AuthService.instance.logOut();
+    await AuthService.instance.sendOtp(rawPhoneNumber: '9333322222', onCodeSent: (_) {}, onError: (_) {});
+    final user = await AuthService.instance.verifyOtpAndSignIn(smsCode: '123456', name: 'OrderTester');
+
+    final p1 = await UdhaarService.instance.addPerson(userId: user.id, name: 'Contact 1');
+    final p2 = await UdhaarService.instance.addPerson(userId: user.id, name: 'Contact 2');
+    final p3 = await UdhaarService.instance.addPerson(userId: user.id, name: 'Contact 3');
+
+    // Save custom order: Contact 3 first, then Contact 1, then Contact 2
+    await UdhaarService.instance.saveUserPersonOrder(user.id, [p3.id, p1.id, p2.id]);
+
+    await tester.pumpWidget(const ExpenseTrackerApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Open Udhaar Screen
+    await tester.tap(find.byTooltip('Udhaar'));
+    await tester.pumpAndSettle();
+
+    // Verify ReorderableListView is present on Udhaar screen
+    expect(find.byType(ReorderableListView), findsOneWidget);
+    expect(find.byIcon(Icons.drag_indicator_rounded), findsWidgets);
+
+    // Verify persons are loaded in the custom rearranged order
+    final listeners = tester.widgetList<LongerHoldDragStartListener>(
+      find.byType(LongerHoldDragStartListener),
+    ).toList();
+    expect(listeners.length, 3);
+    expect(listeners[0].key, ValueKey(p3.id));
+    expect(listeners[1].key, ValueKey(p1.id));
+    expect(listeners[2].key, ValueKey(p2.id));
+
+    // Perform long-press gesture (1150ms > 1000ms delay) to drag Contact 2 up
+    final c2Center = tester.getCenter(find.text('Contact 2'));
+    final gesture = await tester.startGesture(c2Center);
+    await tester.pump(const Duration(milliseconds: 1150));
+    await gesture.moveBy(const Offset(0, -200));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    await AuthService.instance.logOut();
+  });
 }
+

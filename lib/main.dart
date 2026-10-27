@@ -6,6 +6,7 @@ import 'screens/auth/login_screen.dart';
 import 'screens/groups/groups_screen.dart';
 import 'services/auth_service.dart';
 import 'services/group_service.dart';
+import 'services/udhaar_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,6 +24,7 @@ Future<void> main() async {
 
   await AuthService.instance.initialize();
   await GroupService.instance.initialize();
+  await UdhaarService.instance.initialize();
   runApp(const ExpenseTrackerApp());
 }
 

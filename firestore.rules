@@ -6,6 +6,15 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == userId;
+
+      // Udhaar subcollection rules: only the account owner can read/write their udhaar contacts & transactions
+      match /udhaar_persons/{personId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+
+        match /transactions/{transactionId} {
+          allow read, write: if request.auth != null && request.auth.uid == userId;
+        }
+      }
     }
     
     // Group helper function: check if authenticated user is a member of the group
