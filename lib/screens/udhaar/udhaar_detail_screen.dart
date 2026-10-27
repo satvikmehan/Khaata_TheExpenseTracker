@@ -122,10 +122,6 @@ class _UdhaarDetailScreenState extends State<UdhaarDetailScreen> {
         );
         _person = updatedPerson;
 
-        final currentTotal = _person.total;
-        final totalColor = _getAmountColor(currentTotal);
-        final totalText = _formatCurrency(currentTotal);
-
         return Scaffold(
           backgroundColor: const Color(0xFFF8FAFC),
           appBar: AppBar(
@@ -152,6 +148,22 @@ class _UdhaarDetailScreenState extends State<UdhaarDetailScreen> {
                 } else {
                   totalReceived += t.amount;
                 }
+              }
+
+              final calculatedNet = totalGiven - totalReceived;
+              final currentTotal = transactions.isNotEmpty ? calculatedNet : _person.total;
+              final totalColor = _getAmountColor(currentTotal);
+              final totalText = _formatCurrency(currentTotal);
+
+              // Auto-heal person.total if out of sync
+              if (transactions.isNotEmpty && (_person.total - calculatedNet).abs() > 0.001) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  UdhaarService.instance.syncPersonTotal(
+                    userId: currentUser.id,
+                    personId: _person.id,
+                    total: calculatedNet,
+                  );
+                });
               }
 
               return Column(

@@ -460,31 +460,58 @@ class _ExpenseHomeScreenState extends State<ExpenseHomeScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                return Column(
-                  children: [
-                    // Large List Total Display at Top (Tap to Rename)
-                    MonthlyTotal(
-                      monthTitle: month.displayTitle,
-                      formattedTotal: month.formattedTotal,
-                      subtitle: 'TOTAL',
-                      onTitleTap: () => _showRenameListDialog(context, month),
-                    ),
+                return StreamBuilder<List<TransactionModel>>(
+                  stream: ExpenseService.instance.streamTransactions(
+                    widget.group.id,
+                    month.id,
+                  ),
+                  initialData: const [],
+                  builder: (context, txSnapshot) {
+                    final transactions = txSnapshot.data ?? [];
+                    double liveTotal = 0.0;
+                    for (final tx in transactions) {
+                      if (tx.isExpense) {
+                        liveTotal += tx.amount;
+                      } else {
+                        liveTotal -= tx.amount;
+                      }
+                    }
 
-                    // Transactions Stream grouped by date
-                    Expanded(
-                      child: StreamBuilder<List<TransactionModel>>(
-                        stream: ExpenseService.instance.streamTransactions(
-                          widget.group.id,
-                          month.id,
+                    final formattedLiveTotal = transactions.isNotEmpty
+                        ? '₹${liveTotal.toStringAsFixed(liveTotal.truncateToDouble() == liveTotal ? 0 : 2)}'
+                        : month.formattedTotal;
+
+                    // Auto-heal month.total if out of sync
+                    if (transactions.isNotEmpty && (month.total - liveTotal).abs() > 0.001) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        ExpenseService.instance.syncMonthTotal(
+                          groupId: widget.group.id,
+                          monthId: month.id,
+                          total: liveTotal,
+                        );
+                      });
+                    }
+
+                    return Column(
+                      children: [
+                        // Large List Total Display at Top (Tap to Rename)
+                        MonthlyTotal(
+                          monthTitle: month.displayTitle,
+                          formattedTotal: formattedLiveTotal,
+                          subtitle: 'TOTAL',
+                          onTitleTap: () => _showRenameListDialog(context, month),
                         ),
-                        initialData: const [],
-                        builder: (context, txSnapshot) {
-                          if (txSnapshot.connectionState == ConnectionState.waiting &&
-                              !txSnapshot.hasData) {
-                            return const Center(child: CircularProgressIndicator());
-                          }
 
-                          final transactions = txSnapshot.data ?? [];
+                        // Transactions Stream grouped by date
+                        Expanded(
+                          child: Builder(
+                            builder: (context) {
+                              if (txSnapshot.connectionState == ConnectionState.waiting &&
+                                  !txSnapshot.hasData) {
+                                return const Center(child: CircularProgressIndicator());
+                              }
+
+                              final transactions = txSnapshot.data ?? [];
 
                           if (transactions.isEmpty) {
                             return const EmptyState(
@@ -640,7 +667,9 @@ class _ExpenseHomeScreenState extends State<ExpenseHomeScreen> {
                   ],
                 );
               },
-            ),
+            );
+          },
+        ),
     );
   }
 }

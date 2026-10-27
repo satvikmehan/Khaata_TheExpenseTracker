@@ -5,8 +5,6 @@ import '../../services/auth_service.dart';
 import '../../services/udhaar_service.dart';
 import 'udhaar_detail_screen.dart';
 
-import '../../widgets/longer_hold_drag_start_listener.dart';
-
 class UdhaarScreen extends StatefulWidget {
   const UdhaarScreen({super.key});
 
@@ -15,8 +13,6 @@ class UdhaarScreen extends StatefulWidget {
 }
 
 class _UdhaarScreenState extends State<UdhaarScreen> {
-  List<UdhaarPersonModel>? _localPersons;
-  String? _lastFingerprint;
 
   String _formatCurrency(double amount) {
     final absAmt = amount.abs();
@@ -426,8 +422,6 @@ class _UdhaarScreenState extends State<UdhaarScreen> {
           final streamPersons = snapshot.data ?? [];
 
           if (streamPersons.isEmpty) {
-            _localPersons = null;
-            _lastFingerprint = null;
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(32.0),
@@ -480,63 +474,16 @@ class _UdhaarScreenState extends State<UdhaarScreen> {
             );
           }
 
-          final savedOrder = UdhaarService.instance.getCachedUserPersonOrder(currentUser.id);
-          final currentFingerprint = streamPersons
-              .map((p) => '${p.id}:${p.name}:${p.total}')
-              .join('|');
+          final displayPersons = UdhaarService.instance.sortPersonsByOrder(streamPersons);
 
-          if (_localPersons == null || _localPersons!.isEmpty) {
-            _lastFingerprint = currentFingerprint;
-            _localPersons = UdhaarService.instance.sortPersonsByOrder(streamPersons, savedOrder);
-          } else if (_lastFingerprint != currentFingerprint) {
-            _lastFingerprint = currentFingerprint;
-            final currentLocalOrder = _localPersons!.map((p) => p.id).toList();
-            _localPersons = UdhaarService.instance.sortPersonsByOrder(streamPersons, currentLocalOrder);
-          }
-
-          final displayPersons = _localPersons ?? streamPersons;
-
-          return Theme(
-            data: Theme.of(context).copyWith(
-              canvasColor: Colors.transparent,
-            ),
-            child: ReorderableListView.builder(
-              padding: const EdgeInsets.all(16.0),
-              itemCount: displayPersons.length,
-              buildDefaultDragHandles: false,
-              proxyDecorator: (Widget child, int index, Animation<double> animation) {
-                return Material(
-                  elevation: 6.0,
-                  color: Colors.transparent,
-                  shadowColor: Colors.black26,
-                  borderRadius: BorderRadius.circular(8.0),
-                  child: child,
-                );
-              },
-              onReorder: (int oldIndex, int newIndex) {
-                setState(() {
-                  if (newIndex > oldIndex) {
-                    newIndex -= 1;
-                  }
-                  final item = _localPersons!.removeAt(oldIndex);
-                  _localPersons!.insert(newIndex, item);
-                });
-                final orderedIds = _localPersons!.map((p) => p.id).toList();
-                UdhaarService.instance.saveUserPersonOrder(currentUser.id, orderedIds);
-              },
-              itemBuilder: (context, index) {
-                final person = displayPersons[index];
-                return LongerHoldDragStartListener(
-                  key: ValueKey(person.id),
-                  index: index,
-                  delay: const Duration(milliseconds: 1000),
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 10.0),
-                    child: _buildPersonCard(context, person),
-                  ),
-                );
-              },
-            ),
+          return ListView.separated(
+            padding: const EdgeInsets.all(16.0),
+            itemCount: displayPersons.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 10.0),
+            itemBuilder: (context, index) {
+              final person = displayPersons[index];
+              return _buildPersonCard(context, person);
+            },
           );
         },
       ),

@@ -433,6 +433,41 @@ class ExpenseService {
     _mockTxStream.add(Map.from(_mockTransactions));
   }
 
+  Future<void> syncMonthTotal({
+    required String groupId,
+    required String monthId,
+    required double total,
+  }) async {
+    final currentMonth = _mockActiveMonths[groupId];
+    if (currentMonth != null && currentMonth.id == monthId) {
+      if ((currentMonth.total - total).abs() > 0.001) {
+        _mockActiveMonths[groupId] = currentMonth.copyWith(total: total);
+        _mockMonthStream.add(Map.from(_mockActiveMonths));
+      }
+    } else {
+      final completedList = _mockCompletedMonths[groupId];
+      if (completedList != null) {
+        final mIdx = completedList.indexWhere((m) => m.id == monthId);
+        if (mIdx != -1) {
+          final oldM = completedList[mIdx];
+          if ((oldM.total - total).abs() > 0.001) {
+            completedList[mIdx] = oldM.copyWith(total: total);
+          }
+        }
+      }
+    }
+    if (Firebase.apps.isNotEmpty) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('groups')
+            .doc(groupId)
+            .collection('months')
+            .doc(monthId)
+            .update({'total': total});
+      } catch (_) {}
+    }
+  }
+
   // Stream any month document by ID
   Stream<MonthModel?> streamMonth(String groupId, String monthId) {
     if (Firebase.apps.isNotEmpty) {

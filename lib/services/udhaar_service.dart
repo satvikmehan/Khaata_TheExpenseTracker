@@ -38,23 +38,21 @@ class UdhaarService {
     _txStreamController.add({});
   }
 
-  List<UdhaarPersonModel> sortPersonsByOrder(List<UdhaarPersonModel> persons, List<String> order) {
-    if (order.isEmpty) return persons;
-    final orderIndex = <String, int>{};
-    for (int i = 0; i < order.length; i++) {
-      orderIndex[order[i]] = i;
-    }
+  List<UdhaarPersonModel> sortPersonsByOrder(List<UdhaarPersonModel> persons, [List<String>? order]) {
     final sorted = List<UdhaarPersonModel>.from(persons);
     sorted.sort((a, b) {
-      final idxA = orderIndex[a.id];
-      final idxB = orderIndex[b.id];
-      if (idxA != null && idxB != null) {
-        return idxA.compareTo(idxB);
+      // 1. Primary sort: Mod of amount debt or owe (|total|) in descending order
+      final modA = a.total.abs();
+      final modB = b.total.abs();
+      final modDiff = modB.compareTo(modA);
+      if (modDiff != 0) {
+        return modDiff;
       }
-      if (idxA == null && idxB != null) return -1;
-      if (idxA != null && idxB == null) return 1;
+
+      // 2. Secondary sort: Most recently updated
       return b.updatedAt.compareTo(a.updatedAt);
     });
+
     return sorted;
   }
 
@@ -329,11 +327,19 @@ class UdhaarService {
     _mockTxByPerson[personId] = updatedTxList;
 
     // Recalculate person total
-    final newTotal = _calculateTotal(updatedTxList);
-
-    // Update person model in mock
     final personList = _mockPersonsByUser[userId] ?? [];
     final pIdx = personList.indexWhere((p) => p.id == personId);
+    final double newTotal;
+    if (txList.isNotEmpty) {
+      newTotal = _calculateTotal(updatedTxList);
+    } else if (pIdx != -1) {
+      final delta = (type == '-' ? -amount.abs() : amount.abs());
+      newTotal = personList[pIdx].total + delta;
+    } else {
+      newTotal = _calculateTotal(updatedTxList);
+    }
+
+    // Update person model in mock
     if (pIdx != -1) {
       personList[pIdx] = personList[pIdx].copyWith(
         total: newTotal,
@@ -345,7 +351,7 @@ class UdhaarService {
     _txStreamController.add(Map.from(_mockTxByPerson));
     _personsStreamController.add(Map.from(_mockPersonsByUser));
 
-    // Persist to Firestore
+    // Persist to Firestore if available
     if (Firebase.apps.isNotEmpty) {
       try {
         final personDoc = FirebaseFirestore.instance
@@ -355,10 +361,40 @@ class UdhaarService {
             .doc(personId);
 
         await personDoc.collection('transactions').doc(txId).set(tx.toMap());
+
+        // Fetch all transactions from Firestore to compute exact total
+        final allDocs = await personDoc.collection('transactions').get();
+        final allTx = allDocs.docs
+            .map((d) => UdhaarTransactionModel.fromMap(d.id, d.data()))
+            .toList();
+        allTx.sort((a, b) {
+          final dateComp = b.date.compareTo(a.date);
+          if (dateComp != 0) return dateComp;
+          return b.createdAt.compareTo(a.createdAt);
+        });
+
+        _mockTxByPerson[personId] = allTx;
+        final exactTotal = _calculateTotal(allTx);
+
+        final personList = _mockPersonsByUser[userId] ?? [];
+        final pIdx = personList.indexWhere((p) => p.id == personId);
+        if (pIdx != -1) {
+          personList[pIdx] = personList[pIdx].copyWith(
+            total: exactTotal,
+            updatedAt: now,
+          );
+          _mockPersonsByUser[userId] = List.from(personList);
+        }
+
+        _txStreamController.add(Map.from(_mockTxByPerson));
+        _personsStreamController.add(Map.from(_mockPersonsByUser));
+
         await personDoc.update({
-          'total': newTotal,
+          'total': exactTotal,
           'updatedAt': Timestamp.fromDate(now),
         });
+
+        return tx;
       } catch (e) {
         debugPrint('Error saving udhaar transaction to Firestore: $e');
       }
@@ -401,12 +437,71 @@ class UdhaarService {
             .doc(personId);
 
         await personDoc.collection('transactions').doc(transactionId).delete();
+
+        // Fetch all remaining transactions from Firestore to compute exact total
+        final allDocs = await personDoc.collection('transactions').get();
+        final allTx = allDocs.docs
+            .map((d) => UdhaarTransactionModel.fromMap(d.id, d.data()))
+            .toList();
+        allTx.sort((a, b) {
+          final dateComp = b.date.compareTo(a.date);
+          if (dateComp != 0) return dateComp;
+          return b.createdAt.compareTo(a.createdAt);
+        });
+
+        _mockTxByPerson[personId] = allTx;
+        final exactTotal = _calculateTotal(allTx);
+
+        final pList = _mockPersonsByUser[userId] ?? [];
+        final idx = pList.indexWhere((p) => p.id == personId);
+        if (idx != -1) {
+          pList[idx] = pList[idx].copyWith(
+            total: exactTotal,
+            updatedAt: now,
+          );
+          _mockPersonsByUser[userId] = List.from(pList);
+        }
+
+        _txStreamController.add(Map.from(_mockTxByPerson));
+        _personsStreamController.add(Map.from(_mockPersonsByUser));
+
         await personDoc.update({
-          'total': newTotal,
+          'total': exactTotal,
           'updatedAt': Timestamp.fromDate(now),
         });
       } catch (e) {
         debugPrint('Error deleting udhaar transaction: $e');
+      }
+    }
+  }
+
+  Future<void> syncPersonTotal({
+    required String userId,
+    required String personId,
+    required double total,
+  }) async {
+    final now = DateTime.now();
+    final personList = _mockPersonsByUser[userId] ?? [];
+    final pIdx = personList.indexWhere((p) => p.id == personId);
+    if (pIdx != -1 && (personList[pIdx].total - total).abs() > 0.001) {
+      personList[pIdx] = personList[pIdx].copyWith(total: total, updatedAt: now);
+      _mockPersonsByUser[userId] = List.from(personList);
+      _personsStreamController.add(Map.from(_mockPersonsByUser));
+    }
+
+    if (Firebase.apps.isNotEmpty) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .collection('udhaar_persons')
+            .doc(personId)
+            .update({
+          'total': total,
+          'updatedAt': Timestamp.fromDate(now),
+        });
+      } catch (e) {
+        debugPrint('Error syncing udhaar person total: $e');
       }
     }
   }

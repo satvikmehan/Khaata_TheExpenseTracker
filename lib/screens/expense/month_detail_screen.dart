@@ -200,63 +200,87 @@ class MonthDetailScreen extends StatelessWidget {
             ],
           ),
           body: SafeArea(
-            child: Column(
-              children: [
-                // Prominent Top Total
-                MonthlyTotal(
-                  monthTitle: currentMonth.displayTitle,
-                  formattedTotal: currentMonth.formattedTotal,
-                  subtitle: 'TOTAL • ARCHIVED LIST',
-                  onTitleTap: () => _showRenameDialog(context, currentMonth),
-                ),
+            child: StreamBuilder<List<TransactionModel>>(
+              stream: ExpenseService.instance.streamTransactions(
+                group.id,
+                currentMonth.id,
+              ),
+              initialData: const [],
+              builder: (context, txSnapshot) {
+                final transactions = txSnapshot.data ?? [];
+                double liveTotal = 0.0;
+                for (final tx in transactions) {
+                  if (tx.isExpense) {
+                    liveTotal += tx.amount;
+                  } else {
+                    liveTotal -= tx.amount;
+                  }
+                }
 
-                // Restore banner button to undo archive
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  color: const Color(0xFFF1F5F9),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.history_rounded, size: 18.0, color: Color(0xFF475569)),
-                      const SizedBox(width: 8.0),
-                      Expanded(
-                        child: Text(
-                          'Archived list',
-                          style: TextStyle(
-                            fontSize: 13.0,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade700,
-                          ),
-                        ),
-                      ),
-                      TextButton.icon(
-                        icon: const Icon(Icons.unarchive_outlined, size: 16),
-                        label: const Text('Bring to Front Screen'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: const Color(0xFF0F172A),
-                          padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
-                        ),
-                        onPressed: () => _confirmRestoreMonth(context, currentMonth),
-                      ),
-                    ],
-                  ),
-                ),
+                final formattedLiveTotal = transactions.isNotEmpty
+                    ? '₹${liveTotal.toStringAsFixed(liveTotal.truncateToDouble() == liveTotal ? 0 : 2)}'
+                    : currentMonth.formattedTotal;
 
-                // Transactions list with Edit & Delete options
-                Expanded(
-                  child: StreamBuilder<List<TransactionModel>>(
-                    stream: ExpenseService.instance.streamTransactions(
-                      group.id,
-                      currentMonth.id,
+                if (transactions.isNotEmpty && (currentMonth.total - liveTotal).abs() > 0.001) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    ExpenseService.instance.syncMonthTotal(
+                      groupId: group.id,
+                      monthId: currentMonth.id,
+                      total: liveTotal,
+                    );
+                  });
+                }
+
+                return Column(
+                  children: [
+                    // Prominent Top Total
+                    MonthlyTotal(
+                      monthTitle: currentMonth.displayTitle,
+                      formattedTotal: formattedLiveTotal,
+                      subtitle: 'TOTAL • ARCHIVED LIST',
+                      onTitleTap: () => _showRenameDialog(context, currentMonth),
                     ),
-                    initialData: const [],
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting &&
-                          !snapshot.hasData) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
 
-                      final transactions = snapshot.data ?? [];
+                    // Restore banner button to undo archive
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                      color: const Color(0xFFF1F5F9),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.history_rounded, size: 18.0, color: Color(0xFF475569)),
+                          const SizedBox(width: 8.0),
+                          Expanded(
+                            child: Text(
+                              'Archived list',
+                              style: TextStyle(
+                                fontSize: 13.0,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ),
+                          TextButton.icon(
+                            icon: const Icon(Icons.unarchive_outlined, size: 16),
+                            label: const Text('Bring to Front Screen'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF0F172A),
+                              padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
+                            ),
+                            onPressed: () => _confirmRestoreMonth(context, currentMonth),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Transactions list with Edit & Delete options
+                    Expanded(
+                      child: Builder(
+                        builder: (context) {
+                          if (txSnapshot.connectionState == ConnectionState.waiting &&
+                              !txSnapshot.hasData) {
+                            return const Center(child: CircularProgressIndicator());
+                          }
 
                       if (transactions.isEmpty) {
                         return const EmptyState(
@@ -331,7 +355,9 @@ class MonthDetailScreen extends StatelessWidget {
                     },
                   ),
                 ),
-              ],
+                  ],
+                );
+              },
             ),
           ),
         );

@@ -437,8 +437,22 @@ class SplitwiseService {
             .doc(groupId);
 
         await groupDoc.collection('expenses').doc(expId).set(expense.toMap());
+
+        // Fetch all expenses to compute exact mathematical total
+        final allDocs = await groupDoc.collection('expenses').get();
+        final allExp = allDocs.docs.map((d) => SplitwiseExpenseModel.fromMap(d.id, d.data())).toList();
+        final exactTotal = allExp.fold(0.0, (acc, e) => acc + e.amount);
+
+        final groups = _mockGroupsByUser[userId] ?? [];
+        final gIdx = groups.indexWhere((g) => g.id == groupId);
+        if (gIdx != -1) {
+          groups[gIdx] = groups[gIdx].copyWith(totalExpense: exactTotal, updatedAt: now);
+          _mockGroupsByUser[userId] = List.from(groups);
+        }
+        _groupsStreamController.add(Map.from(_mockGroupsByUser));
+
         await groupDoc.update({
-          'totalExpense': newTotal,
+          'totalExpense': exactTotal,
           'updatedAt': Timestamp.fromDate(now),
         });
       } catch (e) {
@@ -504,8 +518,21 @@ class SplitwiseService {
             .doc(groupId);
 
         await groupDoc.collection('expenses').doc(expenseId).update(updated.toMap());
+
+        final allDocs = await groupDoc.collection('expenses').get();
+        final allExp = allDocs.docs.map((d) => SplitwiseExpenseModel.fromMap(d.id, d.data())).toList();
+        final exactTotal = allExp.fold(0.0, (acc, e) => acc + e.amount);
+
+        final groups = _mockGroupsByUser[userId] ?? [];
+        final gIdx = groups.indexWhere((g) => g.id == groupId);
+        if (gIdx != -1) {
+          groups[gIdx] = groups[gIdx].copyWith(totalExpense: exactTotal, updatedAt: now);
+          _mockGroupsByUser[userId] = List.from(groups);
+        }
+        _groupsStreamController.add(Map.from(_mockGroupsByUser));
+
         await groupDoc.update({
-          'totalExpense': newTotal,
+          'totalExpense': exactTotal,
           'updatedAt': Timestamp.fromDate(now),
         });
       } catch (e) {
@@ -547,12 +574,56 @@ class SplitwiseService {
             .doc(groupId);
 
         await groupDoc.collection('expenses').doc(expenseId).delete();
+
+        final allDocs = await groupDoc.collection('expenses').get();
+        final allExp = allDocs.docs.map((d) => SplitwiseExpenseModel.fromMap(d.id, d.data())).toList();
+        final exactTotal = allExp.fold(0.0, (acc, e) => acc + e.amount);
+
+        final groups = _mockGroupsByUser[userId] ?? [];
+        final gIdx = groups.indexWhere((g) => g.id == groupId);
+        if (gIdx != -1) {
+          groups[gIdx] = groups[gIdx].copyWith(totalExpense: exactTotal, updatedAt: now);
+          _mockGroupsByUser[userId] = List.from(groups);
+        }
+        _groupsStreamController.add(Map.from(_mockGroupsByUser));
+
         await groupDoc.update({
-          'totalExpense': newTotal,
+          'totalExpense': exactTotal,
           'updatedAt': Timestamp.fromDate(now),
         });
       } catch (e) {
         debugPrint('Error deleting splitwise expense from Firestore: $e');
+      }
+    }
+  }
+
+  Future<void> syncGroupTotal({
+    required String userId,
+    required String groupId,
+    required double total,
+  }) async {
+    final now = DateTime.now();
+    final groups = _mockGroupsByUser[userId] ?? [];
+    final gIdx = groups.indexWhere((g) => g.id == groupId);
+    if (gIdx != -1 && (groups[gIdx].totalExpense - total).abs() > 0.001) {
+      groups[gIdx] = groups[gIdx].copyWith(totalExpense: total, updatedAt: now);
+      _mockGroupsByUser[userId] = List.from(groups);
+      _groupsStreamController.add(Map.from(_mockGroupsByUser));
+    }
+
+    if (Firebase.apps.isNotEmpty) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .collection('splitwise_groups')
+            .doc(groupId)
+            .update({
+          'totalExpense': total,
+          'updatedAt': Timestamp.fromDate(now),
+        });
+      } catch (e) {
+        debugPrint('Error syncing splitwise group total: $e');
       }
     }
   }

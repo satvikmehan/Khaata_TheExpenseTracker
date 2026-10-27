@@ -277,4 +277,29 @@ class CashService {
       }
     }
   }
+
+  Future<void> syncPendingAmount({
+    required String groupId,
+    required double amount,
+  }) async {
+    if ((getCachedPendingAmount(groupId) - amount).abs() > 0.001) {
+      _mockPendingAmounts[groupId] = amount;
+      _mockPendingStream.add(Map.from(_mockPendingAmounts));
+    }
+    if (Firebase.apps.isNotEmpty) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('groups')
+            .doc(groupId)
+            .collection('cash')
+            .doc('summary')
+            .set({
+          'pendingAmount': amount,
+          'updatedAt': Timestamp.fromDate(DateTime.now()),
+        }, SetOptions(merge: true));
+      } catch (e) {
+        debugPrint('Firestore cash sync error: $e');
+      }
+    }
+  }
 }

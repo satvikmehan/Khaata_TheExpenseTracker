@@ -778,6 +778,16 @@ class _SplitwiseGroupScreenState extends State<SplitwiseGroupScreen> {
 
               final totalSpent = expenses.fold(0.0, (sum, e) => sum + e.amount);
 
+              if (expenses.isNotEmpty && (_group.totalExpense - totalSpent).abs() > 0.001) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  SplitwiseService.instance.syncGroupTotal(
+                    userId: currentUser.id,
+                    groupId: _group.id,
+                    total: totalSpent,
+                  );
+                });
+              }
+
               return ListView(
                 padding: const EdgeInsets.only(bottom: 90.0),
                 children: [

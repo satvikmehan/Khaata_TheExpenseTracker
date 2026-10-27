@@ -138,45 +138,69 @@ class CashTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // Pending Cash Amount Display at Top
-        StreamBuilder<double>(
-          stream: CashService.instance.streamPendingAmount(group.id),
-          initialData: CashService.instance.getCachedPendingAmount(group.id),
-          builder: (context, snapshot) {
-            final pending = snapshot.data ?? CashService.instance.getCachedPendingAmount(group.id);
-            final formatter = NumberFormat.currency(
-              locale: 'en_IN',
-              symbol: '₹',
-              decimalDigits: pending.truncateToDouble() == pending ? 0 : 2,
-            );
-            final formatted = formatter.format(pending);
+    return StreamBuilder<List<CashTransactionModel>>(
+      stream: CashService.instance.streamCashTransactions(group.id),
+      initialData: CashService.instance.getCachedTransactions(group.id),
+      builder: (context, txSnapshot) {
+        final transactions = txSnapshot.data ?? CashService.instance.getCachedTransactions(group.id);
 
-            return MonthlyTotal(
-              monthTitle: 'PENDING AMOUNT',
-              formattedTotal: formatted,
-              subtitle: '',
-            );
-          },
-        ),
+        double livePending = 0.0;
+        for (final tx in transactions) {
+          livePending += tx.signedAmount;
+        }
 
-        // Cash transactions list (deposits & withdrawals)
-        Expanded(
-          child: StreamBuilder<List<CashTransactionModel>>(
-            stream: CashService.instance.streamCashTransactions(group.id),
-            initialData: CashService.instance.getCachedTransactions(group.id),
-            builder: (context, snapshot) {
-              final transactions = snapshot.data ?? CashService.instance.getCachedTransactions(group.id);
+        final liveFormatter = NumberFormat.currency(
+          locale: 'en_IN',
+          symbol: '₹',
+          decimalDigits: livePending.truncateToDouble() == livePending ? 0 : 2,
+        );
+        final liveFormatted = liveFormatter.format(livePending);
 
-              if (transactions.isEmpty) {
-                return const EmptyState(
-                  icon: Icons.payments_outlined,
-                  title: 'No cash transactions yet',
-                  subtitle:
-                      'Tap [+ DEPOSIT] to add cash or [- WITHDRAW] to take out cash from this room.',
+        return Column(
+          children: [
+            // Pending Cash Amount Display at Top
+            StreamBuilder<double>(
+              stream: CashService.instance.streamPendingAmount(group.id),
+              initialData: CashService.instance.getCachedPendingAmount(group.id),
+              builder: (context, snapshot) {
+                final pending = snapshot.data ?? CashService.instance.getCachedPendingAmount(group.id);
+                final formatter = NumberFormat.currency(
+                  locale: 'en_IN',
+                  symbol: '₹',
+                  decimalDigits: pending.truncateToDouble() == pending ? 0 : 2,
                 );
-              }
+                final formatted = transactions.isNotEmpty ? liveFormatted : formatter.format(pending);
+
+                // Auto-heal cash summary if out of sync
+                if (transactions.isNotEmpty && (pending - livePending).abs() > 0.001) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    CashService.instance.syncPendingAmount(
+                      groupId: group.id,
+                      amount: livePending,
+                    );
+                  });
+                }
+
+                return MonthlyTotal(
+                  monthTitle: 'PENDING AMOUNT',
+                  formattedTotal: formatted,
+                  subtitle: '',
+                );
+              },
+            ),
+
+            // Cash transactions list (deposits & withdrawals)
+            Expanded(
+              child: Builder(
+                builder: (context) {
+                  if (transactions.isEmpty) {
+                    return const EmptyState(
+                      icon: Icons.payments_outlined,
+                      title: 'No cash transactions yet',
+                      subtitle:
+                          'Tap [+ DEPOSIT] to add cash or [- WITHDRAW] to take out cash from this room.',
+                    );
+                  }
 
               // Group by date
               final Map<String, List<CashTransactionModel>> grouped = {};
@@ -328,13 +352,13 @@ class CashTab extends StatelessWidget {
                           ),
                         );
                       }),
-                    ],
-                  );
-                },
-              );
-            },
+                      ],
+                    );
+                  },
+                );
+              },
+            ),
           ),
-        ),
 
         // Bottom Action Bar: [+ DEPOSIT] and [- WITHDRAW]
         Container(
@@ -386,5 +410,7 @@ class CashTab extends StatelessWidget {
         ),
       ],
     );
-  }
+  },
+);
+}
 }

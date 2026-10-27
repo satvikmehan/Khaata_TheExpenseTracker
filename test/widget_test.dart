@@ -851,17 +851,72 @@ void main() {
     await AuthService.instance.logOut();
   });
 
-  testWidgets('UdhaarScreen allows rearranging persons by long holding and preserves order across app restarts', (WidgetTester tester) async {
+  testWidgets('UdhaarDetailScreen calculates true net amount (+450 - 50 = +400) and displays ₹400 even if person.total was stale', (WidgetTester tester) async {
+    await AuthService.instance.logOut();
+    await AuthService.instance.sendOtp(rawPhoneNumber: '9444455555', onCodeSent: (_) {}, onError: (_) {});
+    final user = await AuthService.instance.verifyOtpAndSignIn(smsCode: '123456', name: 'NetTester');
+
+    // Create person with a stale/wrong initial total e.g. 100
+    final person = await UdhaarService.instance.addPerson(userId: user.id, name: 'Rubal');
+
+    // Add 3 transactions:
+    // 1. Lajawab: +100
+    // 2. Pending: -50
+    // 3. Sheesha: +350
+    await UdhaarService.instance.addTransaction(
+      userId: user.id,
+      personId: person.id,
+      type: '+',
+      amount: 100,
+      note: 'Lajawab',
+      date: DateTime.now(),
+    );
+    await UdhaarService.instance.addTransaction(
+      userId: user.id,
+      personId: person.id,
+      type: '-',
+      amount: 50,
+      note: 'Pending',
+      date: DateTime.now(),
+    );
+    await UdhaarService.instance.addTransaction(
+      userId: user.id,
+      personId: person.id,
+      type: '+',
+      amount: 350,
+      note: 'Sheesha',
+      date: DateTime.now(),
+    );
+
+    // Intentionally create a stale/diverged person total to simulate the bug
+    final stalePerson = person.copyWith(total: 100.0);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UdhaarDetailScreen(person: stalePerson),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Verify detail screen computes +450 - 50 = +400 and shows ₹400 (not stale ₹100)
+    expect(find.text('YOU WILL GET (NET)'), findsOneWidget);
+    expect(find.text('₹400'), findsOneWidget);
+    expect(find.text('+₹450'), findsOneWidget);
+    expect(find.text('-₹50'), findsWidgets);
+
+    final netText = tester.widget<Text>(find.text('₹400'));
+    expect(netText.style?.color, const Color(0xFF16A34A)); // Green
+
+    await AuthService.instance.logOut();
+  });
+
+  testWidgets('UdhaarScreen has no manual rearrange, uses clean standard list sorted by mod of amount', (WidgetTester tester) async {
     await AuthService.instance.logOut();
     await AuthService.instance.sendOtp(rawPhoneNumber: '9333322222', onCodeSent: (_) {}, onError: (_) {});
-    final user = await AuthService.instance.verifyOtpAndSignIn(smsCode: '123456', name: 'OrderTester');
+    final user = await AuthService.instance.verifyOtpAndSignIn(smsCode: '123456', name: 'NoRearrangeTester');
 
-    final p1 = await UdhaarService.instance.addPerson(userId: user.id, name: 'Contact 1');
-    final p2 = await UdhaarService.instance.addPerson(userId: user.id, name: 'Contact 2');
-    final p3 = await UdhaarService.instance.addPerson(userId: user.id, name: 'Contact 3');
-
-    // Save custom order: Contact 3 first, then Contact 1, then Contact 2
-    await UdhaarService.instance.saveUserPersonOrder(user.id, [p3.id, p1.id, p2.id]);
+    await UdhaarService.instance.addPerson(userId: user.id, name: 'Contact 1');
+    await UdhaarService.instance.addPerson(userId: user.id, name: 'Contact 2');
 
     await tester.pumpWidget(const ExpenseTrackerApp());
     await tester.pump();
@@ -871,27 +926,54 @@ void main() {
     await tester.tap(find.byTooltip('Udhaar'));
     await tester.pumpAndSettle();
 
-    // Verify ReorderableListView is present on Udhaar screen
-    expect(find.byType(ReorderableListView), findsOneWidget);
-    expect(find.byIcon(Icons.drag_indicator_rounded), findsNothing);
+    // Verify ReorderableListView is NOT present, standard ListView is used
+    expect(find.byType(ReorderableListView), findsNothing);
+    expect(find.byType(ListView), findsOneWidget);
+    expect(find.byType(LongerHoldDragStartListener), findsNothing);
 
-    // Verify persons are loaded in the custom rearranged order
-    final listeners = tester.widgetList<LongerHoldDragStartListener>(
-      find.byType(LongerHoldDragStartListener),
-    ).toList();
-    expect(listeners.length, 3);
-    expect(listeners[0].key, ValueKey(p3.id));
-    expect(listeners[1].key, ValueKey(p1.id));
-    expect(listeners[2].key, ValueKey(p2.id));
+    await AuthService.instance.logOut();
+  });
 
-    // Perform long-press gesture (1150ms > 1000ms delay) to drag Contact 2 up
-    final c2Center = tester.getCenter(find.text('Contact 2'));
-    final gesture = await tester.startGesture(c2Center);
-    await tester.pump(const Duration(milliseconds: 1150));
-    await gesture.moveBy(const Offset(0, -200));
+  testWidgets('Udhaar tab arranges order based upon the mod of amount debt or own in descending order', (WidgetTester tester) async {
+    await AuthService.instance.logOut();
+    await AuthService.instance.sendOtp(rawPhoneNumber: '9555566666', onCodeSent: (_) {}, onError: (_) {});
+    final user = await AuthService.instance.verifyOtpAndSignIn(smsCode: '123456', name: 'ModSortTester');
+
+    // Create 4 persons
+    final pAman = await UdhaarService.instance.addPerson(userId: user.id, name: 'Aman');
+    final pRubal = await UdhaarService.instance.addPerson(userId: user.id, name: 'Rubal');
+    final pChetan = await UdhaarService.instance.addPerson(userId: user.id, name: 'Chetan');
+    await UdhaarService.instance.addPerson(userId: user.id, name: 'Deepak');
+
+    // Aman has +100 (|100| = 100)
+    await UdhaarService.instance.addTransaction(userId: user.id, personId: pAman.id, type: '+', amount: 100, note: '', date: DateTime.now());
+    // Rubal has -700 (|-700| = 700)
+    await UdhaarService.instance.addTransaction(userId: user.id, personId: pRubal.id, type: '-', amount: 700, note: '', date: DateTime.now());
+    // Chetan has +450 (|450| = 450)
+    await UdhaarService.instance.addTransaction(userId: user.id, personId: pChetan.id, type: '+', amount: 450, note: '', date: DateTime.now());
+    // Deepak has 0 (|0| = 0)
+
+    await tester.pumpWidget(const ExpenseTrackerApp());
     await tester.pump();
-    await gesture.up();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Open Udhaar
+    await tester.tap(find.byTooltip('Udhaar'));
     await tester.pumpAndSettle();
+
+    // Verify ordering is based on mod of amount descending:
+    // 1st: Rubal (700)
+    // 2nd: Chetan (450)
+    // 3rd: Aman (100)
+    // 4th: Deepak (0)
+    final rubalPos = tester.getTopLeft(find.text('Rubal')).dy;
+    final chetanPos = tester.getTopLeft(find.text('Chetan')).dy;
+    final amanPos = tester.getTopLeft(find.text('Aman')).dy;
+    final deepakPos = tester.getTopLeft(find.text('Deepak')).dy;
+
+    expect(rubalPos, lessThan(chetanPos));
+    expect(chetanPos, lessThan(amanPos));
+    expect(amanPos, lessThan(deepakPos));
 
     await AuthService.instance.logOut();
   });
