@@ -390,15 +390,6 @@ class _UdhaarScreenState extends State<UdhaarScreen> {
                     ),
                   ),
                 ),
-
-                const SizedBox(width: 8.0),
-
-                // Drag indicator handle (same as room cards)
-                Icon(
-                  Icons.drag_indicator_rounded,
-                  size: 20.0,
-                  color: Colors.grey.shade400,
-                ),
               ],
             ),
           ],

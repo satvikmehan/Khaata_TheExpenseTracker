@@ -221,6 +221,73 @@ class SplitwiseService {
     }
   }
 
+  Future<void> removeMember({
+    required String userId,
+    required String groupId,
+    required String memberName,
+  }) async {
+    final now = DateTime.now();
+    final currentList = _mockGroupsByUser[userId] ?? [];
+    final idx = currentList.indexWhere((g) => g.id == groupId);
+    if (idx != -1) {
+      final existing = List<String>.from(currentList[idx].members);
+      existing.remove(memberName);
+      final updated = currentList[idx].copyWith(
+        members: existing,
+        updatedAt: now,
+      );
+      currentList[idx] = updated;
+      _mockGroupsByUser[userId] = List.from(currentList);
+
+      // Clean up any expenses where memberName is in involvedMembers
+      final expList = _mockExpensesByGroup[groupId] ?? [];
+      bool expensesChanged = false;
+      final updatedExpenses = expList.map((exp) {
+        if (exp.involvedMembers.contains(memberName)) {
+          expensesChanged = true;
+          final newInvolved = exp.involvedMembers.where((m) => m != memberName).toList();
+          return exp.copyWith(involvedMembers: newInvolved);
+        }
+        return exp;
+      }).toList();
+
+      if (expensesChanged) {
+        _mockExpensesByGroup[groupId] = updatedExpenses;
+        _expensesStreamController.add(Map.from(_mockExpensesByGroup));
+      }
+
+      _groupsStreamController.add(Map.from(_mockGroupsByUser));
+
+      if (Firebase.apps.isNotEmpty) {
+        try {
+          final groupDoc = FirebaseFirestore.instance
+              .collection('users')
+              .doc(userId)
+              .collection('splitwise_groups')
+              .doc(groupId);
+
+          await groupDoc.update({
+            'members': existing,
+            'updatedAt': Timestamp.fromDate(now),
+          });
+
+          if (expensesChanged) {
+            for (final exp in updatedExpenses) {
+              final original = expList.firstWhere((e) => e.id == exp.id, orElse: () => exp);
+              if (original.involvedMembers.contains(memberName)) {
+                await groupDoc.collection('expenses').doc(exp.id).update({
+                  'involvedMembers': exp.involvedMembers,
+                });
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('Error removing splitwise member: $e');
+        }
+      }
+    }
+  }
+
   Future<void> markGroupDone({
     required String userId,
     required String groupId,
@@ -380,6 +447,73 @@ class SplitwiseService {
     }
 
     return expense;
+  }
+
+  Future<SplitwiseExpenseModel> updateExpense({
+    required String userId,
+    required String groupId,
+    required String expenseId,
+    required String description,
+    required double amount,
+    required String paidBy,
+    required List<String> involvedMembers,
+    required DateTime date,
+  }) async {
+    final now = DateTime.now();
+    final expList = _mockExpensesByGroup[groupId] ?? [];
+    final idx = expList.indexWhere((e) => e.id == expenseId);
+    if (idx == -1) {
+      throw Exception('Expense not found');
+    }
+    final existing = expList[idx];
+    final updated = existing.copyWith(
+      description: description.trim(),
+      amount: amount.abs(),
+      paidBy: paidBy.trim(),
+      involvedMembers: involvedMembers.map((m) => m.trim()).toList(),
+      date: date,
+    );
+
+    final updatedList = List<SplitwiseExpenseModel>.from(expList);
+    updatedList[idx] = updated;
+    updatedList.sort((a, b) {
+      final dateComp = b.date.compareTo(a.date);
+      if (dateComp != 0) return dateComp;
+      return b.createdAt.compareTo(a.createdAt);
+    });
+    _mockExpensesByGroup[groupId] = updatedList;
+
+    final newTotal = updatedList.fold(0.0, (acc, e) => acc + e.amount);
+
+    final groups = _mockGroupsByUser[userId] ?? [];
+    final gIdx = groups.indexWhere((g) => g.id == groupId);
+    if (gIdx != -1) {
+      groups[gIdx] = groups[gIdx].copyWith(totalExpense: newTotal, updatedAt: now);
+      _mockGroupsByUser[userId] = List.from(groups);
+    }
+
+    _expensesStreamController.add(Map.from(_mockExpensesByGroup));
+    _groupsStreamController.add(Map.from(_mockGroupsByUser));
+
+    if (Firebase.apps.isNotEmpty) {
+      try {
+        final groupDoc = FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .collection('splitwise_groups')
+            .doc(groupId);
+
+        await groupDoc.collection('expenses').doc(expenseId).update(updated.toMap());
+        await groupDoc.update({
+          'totalExpense': newTotal,
+          'updatedAt': Timestamp.fromDate(now),
+        });
+      } catch (e) {
+        debugPrint('Error updating splitwise expense in Firestore: $e');
+      }
+    }
+
+    return updated;
   }
 
   Future<void> deleteExpense({

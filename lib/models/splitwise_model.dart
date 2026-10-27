@@ -121,6 +121,30 @@ class SplitwiseExpenseModel {
     required this.createdAt,
   });
 
+  SplitwiseExpenseModel copyWith({
+    String? id,
+    String? groupId,
+    String? userId,
+    String? description,
+    double? amount,
+    String? paidBy,
+    List<String>? involvedMembers,
+    DateTime? date,
+    DateTime? createdAt,
+  }) {
+    return SplitwiseExpenseModel(
+      id: id ?? this.id,
+      groupId: groupId ?? this.groupId,
+      userId: userId ?? this.userId,
+      description: description ?? this.description,
+      amount: amount ?? this.amount,
+      paidBy: paidBy ?? this.paidBy,
+      involvedMembers: involvedMembers ?? this.involvedMembers,
+      date: date ?? this.date,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'groupId': groupId,

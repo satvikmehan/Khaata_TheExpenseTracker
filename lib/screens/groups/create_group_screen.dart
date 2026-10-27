@@ -164,7 +164,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                             border: Border.all(color: Colors.grey.shade300),
                           ),
                           child: Text(
-                            '$_maxMembers members',
+                            '$_maxMembers ${_maxMembers == 1 ? "member" : "members"}',
                             style: const TextStyle(
                               fontSize: 13.0,
                               fontWeight: FontWeight.w700,
@@ -191,8 +191,8 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                           key: const Key('decrease_members_btn'),
                           tooltip: 'Decrease',
                           icon: const Icon(Icons.remove_circle_outline, size: 26),
-                          color: _maxMembers > 2 ? const Color(0xFF0F172A) : Colors.grey.shade300,
-                          onPressed: _maxMembers > 2
+                          color: _maxMembers > 1 ? const Color(0xFF0F172A) : Colors.grey.shade300,
+                          onPressed: _maxMembers > 1
                               ? () => setState(() => _maxMembers--)
                               : null,
                         ),
@@ -209,9 +209,9 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                             child: Slider(
                               key: const Key('members_slider'),
                               value: _maxMembers.toDouble(),
-                              min: 2,
+                              min: 1,
                               max: 10,
-                              divisions: 8,
+                              divisions: 9,
                               label: '$_maxMembers',
                               onChanged: (val) {
                                 setState(() => _maxMembers = val.round());

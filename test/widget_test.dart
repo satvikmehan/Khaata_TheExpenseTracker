@@ -306,6 +306,16 @@ void main() {
     await tester.pump();
     expect(find.text('3 members'), findsOneWidget);
 
+    // Tap - to decrease to 2
+    await tester.tap(find.byKey(const Key('decrease_members_btn')));
+    await tester.pump();
+    expect(find.text('2 members'), findsOneWidget);
+
+    // Tap - to decrease to 1 (option for 1 member only)
+    await tester.tap(find.byKey(const Key('decrease_members_btn')));
+    await tester.pump();
+    expect(find.text('1 member'), findsOneWidget);
+
     // Verify choice chips are NOT rendered (slider only)
     expect(find.byType(ChoiceChip), findsNothing);
   });
@@ -647,7 +657,7 @@ void main() {
     // Verify ReorderableListView is present on front screen
     expect(find.byType(ReorderableListView), findsOneWidget);
     expect(find.byType(LongerHoldDragStartListener), findsWidgets);
-    expect(find.byIcon(Icons.drag_indicator_rounded), findsWidgets);
+    expect(find.byIcon(Icons.drag_indicator_rounded), findsNothing);
 
     // Verify all 3 rooms are visible
     expect(find.text('Room Alpha'), findsOneWidget);
@@ -863,7 +873,7 @@ void main() {
 
     // Verify ReorderableListView is present on Udhaar screen
     expect(find.byType(ReorderableListView), findsOneWidget);
-    expect(find.byIcon(Icons.drag_indicator_rounded), findsWidgets);
+    expect(find.byIcon(Icons.drag_indicator_rounded), findsNothing);
 
     // Verify persons are loaded in the custom rearranged order
     final listeners = tester.widgetList<LongerHoldDragStartListener>(
@@ -998,8 +1008,55 @@ void main() {
     final owesWidget = tester.widget<Text>(find.text('Owes ₹500'));
     expect(owesWidget.style?.color, const Color(0xFFDC2626)); // Red
 
+    // Feature 1: Click transaction to edit it
+    await tester.tap(find.text('Seafood Dinner'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Edit Expense'), findsOneWidget);
+    final editTextFields = find.byType(TextField);
+    await tester.enterText(editTextFields.at(0), '1200');
+    await tester.enterText(editTextFields.at(1), 'Buffet Dinner');
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Update Expense'));
+    await tester.tap(find.text('Update Expense'));
+    await tester.pumpAndSettle();
+
+    // Verify transaction updated and balances recalculated (1200 / 2 = 600)
+    expect(find.text('Buffet Dinner'), findsOneWidget);
+    expect(find.text('₹1200'), findsNWidgets(2)); // Total banner & expense row
+    expect(find.text('Gets back ₹600'), findsOneWidget);
+    expect(find.text('Owes ₹600'), findsOneWidget);
+
+    // Feature 2: Remove a person from Splitwise
+    // First, add Pooja via Add People
+    await tester.tap(find.byTooltip('Add People'));
+    await tester.pumpAndSettle();
+
+    final addPeopleField = find.byType(TextField);
+    await tester.enterText(addPeopleField, 'Pooja');
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Done'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pooja'), findsWidgets);
+
+    // Remove Pooja using the remove icon beside her name
+    await tester.tap(find.byTooltip('Remove Pooja'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Remove Pooja?'), findsOneWidget);
+    await tester.tap(find.text('Remove'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pooja'), findsNothing);
+
+    // Feature 3: Verify Add Expense FAB is visible when active
+    expect(find.byType(FloatingActionButton), findsOneWidget);
+
     // Mark party as done
-    await tester.tap(find.text('Done'));
+    await tester.tap(find.widgetWithText(TextButton, 'Done'));
     await tester.pumpAndSettle();
 
     // Confirm mark done
@@ -1007,6 +1064,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('COMPLETED'), findsOneWidget);
+
+    // Once party is done, all editing options MUST be removed
+    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(find.byTooltip('Add People'), findsNothing);
+    expect(find.byIcon(Icons.close), findsNothing);
+    expect(find.byIcon(Icons.delete_outline), findsNothing);
 
     // Go back to Splitwise home screen
     await tester.pageBack();

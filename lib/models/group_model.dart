@@ -65,7 +65,7 @@ class GroupModel {
       inviteCode: map['inviteCode'] as String? ?? '',
       members: membersList,
       memberNames: memberNamesMap,
-      maxMembers: maxMem.clamp(2, 10),
+      maxMembers: maxMem.clamp(1, 10),
       createdAt: parseDate(map['createdAt']),
     );
   }

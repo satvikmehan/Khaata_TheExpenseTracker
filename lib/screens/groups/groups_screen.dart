@@ -459,7 +459,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                     borderRadius: BorderRadius.circular(4.0),
                   ),
                   child: Text(
-                    '${group.members.length}/${group.maxMembers} members',
+                    '${group.members.length}/${group.maxMembers} ${group.maxMembers == 1 ? "member" : "members"}',
                     style: TextStyle(
                       fontSize: 11.0,
                       fontWeight: FontWeight.w600,
@@ -468,12 +468,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
                           : const Color(0xFF92400E),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8.0),
-                Icon(
-                  Icons.drag_indicator_rounded,
-                  size: 20.0,
-                  color: Colors.grey.shade400,
                 ),
               ],
             ),

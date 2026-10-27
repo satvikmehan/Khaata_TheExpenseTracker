@@ -95,6 +95,30 @@ class _SplitwiseGroupScreenState extends State<SplitwiseGroupScreen> {
                       ],
                     ),
                     const SizedBox(height: 14.0),
+                    if (!isInitial && _group.members.isNotEmpty) ...[
+                      const Text(
+                        'Current members in party (tap to remove):',
+                        style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                      ),
+                      const SizedBox(height: 6.0),
+                      Wrap(
+                        spacing: 6.0,
+                        runSpacing: 6.0,
+                        children: _group.members.map((name) {
+                          return Chip(
+                            backgroundColor: const Color(0xFFF1F5F9),
+                            label: Text(name),
+                            deleteIcon: const Icon(Icons.close, size: 16),
+                            onDeleted: () async {
+                              Navigator.pop(ctx);
+                              final expenses = SplitwiseService.instance.getCachedExpenses(_group.id);
+                              await _confirmRemovePerson(name, expenses);
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 14.0),
+                    ],
                     if (enteredNames.isNotEmpty) ...[
                       const Text(
                         'People to add:',
@@ -159,10 +183,15 @@ class _SplitwiseGroupScreenState extends State<SplitwiseGroupScreen> {
     );
   }
 
-  Future<void> _showAddExpenseModal() async {
-    final amountController = TextEditingController();
-    final descController = TextEditingController();
-    DateTime selectedDate = DateTime.now();
+  Future<void> _showExpenseModal({SplitwiseExpenseModel? expense}) async {
+    final isEdit = expense != null;
+    final amountController = TextEditingController(
+      text: isEdit ? _formatAmount(expense.amount) : '',
+    );
+    final descController = TextEditingController(
+      text: isEdit ? expense.description : '',
+    );
+    DateTime selectedDate = isEdit ? expense.date : DateTime.now();
 
     final members = _group.members;
     if (members.isEmpty) {
@@ -170,8 +199,12 @@ class _SplitwiseGroupScreenState extends State<SplitwiseGroupScreen> {
       return;
     }
 
-    String selectedPayer = members.first;
-    final Set<String> selectedInvolved = Set.from(members);
+    String selectedPayer = (isEdit && members.contains(expense.paidBy))
+        ? expense.paidBy
+        : members.first;
+    final Set<String> selectedInvolved = isEdit
+        ? Set.from(expense.involvedMembers.where((m) => members.contains(m)))
+        : Set.from(members);
 
     await showModalBottomSheet(
       context: context,
@@ -203,9 +236,9 @@ class _SplitwiseGroupScreenState extends State<SplitwiseGroupScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Add Expense',
-                          style: TextStyle(
+                        Text(
+                          isEdit ? 'Edit Expense' : 'Add Expense',
+                          style: const TextStyle(
                             fontSize: 18.0,
                             fontWeight: FontWeight.w700,
                             color: Color(0xFF0F172A),
@@ -458,23 +491,42 @@ class _SplitwiseGroupScreenState extends State<SplitwiseGroupScreen> {
 
                           Navigator.pop(ctx);
 
-                          await SplitwiseService.instance.addExpense(
-                            userId: currentUser.id,
-                            groupId: _group.id,
-                            description: desc,
-                            amount: amt,
-                            paidBy: selectedPayer,
-                            involvedMembers: selectedInvolved.toList(),
-                            date: selectedDate,
-                          );
-
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Added expense "$desc" of ₹$amtText')),
+                          if (isEdit) {
+                            await SplitwiseService.instance.updateExpense(
+                              userId: currentUser.id,
+                              groupId: _group.id,
+                              expenseId: expense.id,
+                              description: desc,
+                              amount: amt,
+                              paidBy: selectedPayer,
+                              involvedMembers: selectedInvolved.toList(),
+                              date: selectedDate,
                             );
+
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Updated expense "$desc" of ₹$amtText')),
+                              );
+                            }
+                          } else {
+                            await SplitwiseService.instance.addExpense(
+                              userId: currentUser.id,
+                              groupId: _group.id,
+                              description: desc,
+                              amount: amt,
+                              paidBy: selectedPayer,
+                              involvedMembers: selectedInvolved.toList(),
+                              date: selectedDate,
+                            );
+
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Added expense "$desc" of ₹$amtText')),
+                              );
+                            }
                           }
                         },
-                        child: const Text('Save Expense', style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w600)),
+                        child: Text(isEdit ? 'Update Expense' : 'Save Expense', style: const TextStyle(fontSize: 15.0, fontWeight: FontWeight.w600)),
                       ),
                     ),
                   ],
@@ -485,6 +537,91 @@ class _SplitwiseGroupScreenState extends State<SplitwiseGroupScreen> {
         );
       },
     );
+  }
+
+  Future<void> _confirmRemovePerson(String person, List<SplitwiseExpenseModel> expenses) async {
+    final paidExpenses = expenses.where((e) => e.paidBy == person).toList();
+    if (paidExpenses.isNotEmpty) {
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('Cannot Remove $person'),
+          content: Text(
+            '"$person" is recorded as the payer for ${paidExpenses.length} expense(s) '
+            '(e.g. "${paidExpenses.first.description}"). Please edit or delete those expenses first.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final soloExpenses = expenses.where((e) => e.involvedMembers.length == 1 && e.involvedMembers.contains(person)).toList();
+    if (soloExpenses.isNotEmpty) {
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('Cannot Remove $person'),
+          content: Text(
+            '"$person" is the only person involved in "${soloExpenses.first.description}". '
+            'Please edit or delete that expense first.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Remove $person?'),
+        content: Text(
+          'Are you sure you want to remove "$person" from this party? '
+          'They will be excluded from settlements and existing shared expenses.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final currentUser = AuthService.instance.currentUser;
+      if (currentUser != null) {
+        await SplitwiseService.instance.removeMember(
+          userId: currentUser.id,
+          groupId: _group.id,
+          memberName: person,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Removed "$person" from this party.')),
+          );
+        }
+      }
+    }
   }
 
   Future<void> _confirmMarkPartyDone() async {
@@ -607,11 +744,12 @@ class _SplitwiseGroupScreenState extends State<SplitwiseGroupScreen> {
               ],
             ),
             actions: [
-              IconButton(
-                tooltip: 'Add People',
-                icon: const Icon(Icons.person_add_alt_1_outlined, size: 20),
-                onPressed: () => _showAddPeopleDialog(isInitial: false),
-              ),
+              if (!_group.isDone)
+                IconButton(
+                  tooltip: 'Add People',
+                  icon: const Icon(Icons.person_add_alt_1_outlined, size: 20),
+                  onPressed: () => _showAddPeopleDialog(isInitial: false),
+                ),
               if (!_group.isDone)
                 TextButton.icon(
                   icon: const Icon(Icons.check_circle_outline, size: 18, color: Color(0xFF16A34A)),
@@ -754,44 +892,57 @@ class _SplitwiseGroupScreenState extends State<SplitwiseGroupScreen> {
                           statusText = 'Settled (₹0)';
                         }
 
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 12.0),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 16,
-                                backgroundColor: isPositive
-                                    ? const Color(0xFFDCFCE7)
-                                    : (isNegative ? const Color(0xFFFEE2E2) : const Color(0xFFF1F5F9)),
-                                child: Text(
-                                  person.isNotEmpty ? person[0].toUpperCase() : '?',
+                        return InkWell(
+                          onTap: _group.isDone ? null : () => _confirmRemovePerson(person, expenses),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 12.0),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: isPositive
+                                      ? const Color(0xFFDCFCE7)
+                                      : (isNegative ? const Color(0xFFFEE2E2) : const Color(0xFFF1F5F9)),
+                                  child: Text(
+                                    person.isNotEmpty ? person[0].toUpperCase() : '?',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12.0),
+                                Expanded(
+                                  child: Text(
+                                    person,
+                                    style: const TextStyle(
+                                      fontSize: 15.0,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF0F172A),
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  statusText,
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: 14.0,
                                     fontWeight: FontWeight.w700,
                                     color: textColor,
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 12.0),
-                              Expanded(
-                                child: Text(
-                                  person,
-                                  style: const TextStyle(
-                                    fontSize: 15.0,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF0F172A),
+                                if (!_group.isDone) ...[
+                                  const SizedBox(width: 6.0),
+                                  IconButton(
+                                    icon: const Icon(Icons.close, size: 16, color: Color(0xFF94A3B8)),
+                                    tooltip: 'Remove $person',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    onPressed: () => _confirmRemovePerson(person, expenses),
                                   ),
-                                ),
-                              ),
-                              Text(
-                                statusText,
-                                style: TextStyle(
-                                  fontSize: 14.0,
-                                  fontWeight: FontWeight.w700,
-                                  color: textColor,
-                                ),
-                              ),
-                            ],
+                                ],
+                              ],
+                            ),
                           ),
                         );
                       },
@@ -838,7 +989,9 @@ class _SplitwiseGroupScreenState extends State<SplitwiseGroupScreen> {
                           ),
                           const SizedBox(height: 4.0),
                           Text(
-                            'Click "+ Add Expense" at the bottom right to record who paid and who was involved.',
+                            _group.isDone
+                                ? 'No expenses recorded for this party.'
+                                : 'Click "+ Add Expense" at the bottom right to record who paid and who was involved.',
                             textAlign: TextAlign.center,
                             style: TextStyle(fontSize: 12.0, color: Colors.grey.shade500),
                           ),
@@ -855,63 +1008,71 @@ class _SplitwiseGroupScreenState extends State<SplitwiseGroupScreen> {
                       itemBuilder: (context, index) {
                         final expense = expenses[index];
                         return Container(
-                          padding: const EdgeInsets.all(14.0),
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(8.0),
                             border: Border.all(color: Colors.grey.shade200),
                           ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade50,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(Icons.receipt_outlined, size: 18, color: Colors.blue.shade700),
-                              ),
-                              const SizedBox(width: 12.0),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      expense.description,
-                                      style: const TextStyle(
-                                        fontSize: 14.0,
-                                        fontWeight: FontWeight.w700,
-                                        color: Color(0xFF0F172A),
-                                      ),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8.0),
+                            onTap: _group.isDone ? null : () => _showExpenseModal(expense: expense),
+                            child: Padding(
+                              padding: const EdgeInsets.all(14.0),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade50,
+                                      shape: BoxShape.circle,
                                     ),
-                                    const SizedBox(height: 3.0),
-                                    Text(
-                                      'Paid by ${expense.paidBy} • For ${expense.involvedMembers.join(", ")}',
-                                      style: TextStyle(fontSize: 11.0, color: Colors.grey.shade600),
+                                    child: Icon(Icons.receipt_outlined, size: 18, color: Colors.blue.shade700),
+                                  ),
+                                  const SizedBox(width: 12.0),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          expense.description,
+                                          style: const TextStyle(
+                                            fontSize: 14.0,
+                                            fontWeight: FontWeight.w700,
+                                            color: Color(0xFF0F172A),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 3.0),
+                                        Text(
+                                          'Paid by ${expense.paidBy} • For ${expense.involvedMembers.join(", ")}',
+                                          style: TextStyle(fontSize: 11.0, color: Colors.grey.shade600),
+                                        ),
+                                        const SizedBox(height: 2.0),
+                                        Text(
+                                          DateFormat('dd MMM yyyy').format(expense.date),
+                                          style: TextStyle(fontSize: 11.0, color: Colors.grey.shade400),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(height: 2.0),
-                                    Text(
-                                      DateFormat('dd MMM yyyy').format(expense.date),
-                                      style: TextStyle(fontSize: 11.0, color: Colors.grey.shade400),
+                                  ),
+                                  Text(
+                                    '₹${_formatAmount(expense.amount)}',
+                                    style: const TextStyle(
+                                      fontSize: 15.0,
+                                      fontWeight: FontWeight.w800,
+                                      color: Color(0xFF0F172A),
+                                    ),
+                                  ),
+                                  if (!_group.isDone) ...[
+                                    const SizedBox(width: 4.0),
+                                    IconButton(
+                                      icon: Icon(Icons.delete_outline, size: 18, color: Colors.grey.shade400),
+                                      onPressed: () => _confirmDeleteExpense(expense),
                                     ),
                                   ],
-                                ),
+                                ],
                               ),
-                              Text(
-                                '₹${_formatAmount(expense.amount)}',
-                                style: const TextStyle(
-                                  fontSize: 15.0,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFF0F172A),
-                                ),
-                              ),
-                              const SizedBox(width: 4.0),
-                              IconButton(
-                                icon: Icon(Icons.delete_outline, size: 18, color: Colors.grey.shade400),
-                                onPressed: () => _confirmDeleteExpense(expense),
-                              ),
-                            ],
+                            ),
                           ),
                         );
                       },
@@ -920,13 +1081,15 @@ class _SplitwiseGroupScreenState extends State<SplitwiseGroupScreen> {
               );
             },
           ),
-          floatingActionButton: FloatingActionButton.extended(
-            icon: const Icon(Icons.add, size: 20),
-            label: const Text('Add Expense', style: TextStyle(fontWeight: FontWeight.w600)),
-            backgroundColor: const Color(0xFF0F172A),
-            foregroundColor: Colors.white,
-            onPressed: _showAddExpenseModal,
-          ),
+          floatingActionButton: _group.isDone
+              ? null
+              : FloatingActionButton.extended(
+                  icon: const Icon(Icons.add, size: 20),
+                  label: const Text('Add Expense', style: TextStyle(fontWeight: FontWeight.w600)),
+                  backgroundColor: const Color(0xFF0F172A),
+                  foregroundColor: Colors.white,
+                  onPressed: () => _showExpenseModal(),
+                ),
         );
       },
     );

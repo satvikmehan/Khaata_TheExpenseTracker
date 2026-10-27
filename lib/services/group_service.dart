@@ -124,7 +124,7 @@ class GroupService {
   }) async {
     final inviteCode = _generateInviteCode();
     final now = DateTime.now();
-    final clampedMax = maxMembers.clamp(2, 10);
+    final clampedMax = maxMembers.clamp(1, 10);
     final creatorName = (userName != null && userName.trim().isNotEmpty)
         ? userName.trim()
         : (AuthService.instance.currentUser?.name ?? 'User');
