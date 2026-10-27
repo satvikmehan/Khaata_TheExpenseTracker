@@ -46,19 +46,31 @@ A minimal, real-time shared expense tracker and room ledger built with Flutter a
 - **Quick Modals**: Clicking `+` or `-` prompts for Amount, Note, and Date to instantly update the running total.
 - **Transaction History**: Tap any person's name to view their full transaction ledger with dates, descriptions, and delete options.
 
-### 6. Month Completion & Two-Way Swap/Restore
+### 6. Splitwise Tab (Party & Event Expense Splitting)
+- Accessible via the **Splitwise** icon (`Icons.call_split_rounded`) directly beside the Udhaar icon on the front screen.
+- **Party Group Creation**: Create groups for events, parties, or trips with a custom party date (defaulting to today). Automatically rearranged by event date.
+- **People Present**: Easily add all present members upon creation or when entering the group.
+- **Bottom Right FAB for Expenses**: Quick `+ Add Expense` button asking for Amount, Description, Paid By (select member), and Who All Involved (equal split multi-select checkboxes).
+- **Automated Net Settlements**:
+  - Displays each person's net balance on the front screen.
+  - **Green** for members who are owed money / to receive (`Gets back ₹X`).
+  - **Red** for members who owe money / have to give (`Owes ₹X`).
+  - **Black** for members who are completely even (`Settled (₹0)`).
+- **Party Completion & History Archive**: Once the event is over, click "Done" to archive the party into the History tab for persistent record keeping.
+
+### 7. Month Completion & Two-Way Swap/Restore
 - **Done For This List**: Mark the active month finished to lock its ledger into history.
 - **Automatic Rollover**: Automatically initializes the next calendar month at `₹0.00`.
 - **Two-Way Restore**: Accidentally closed a month? Restore any archived month back to the active front screen with a single tap, swapping the current list into the archive automatically.
 - **Past Month Editing**: Modify or add missed receipts to previous months anytime.
 
-### 7. Seamless Authentication & Privacy
+### 8. Seamless Authentication & Privacy
 - **Google Sign-In & Phone OTP**: Fast login with Google or SMS verification code.
 - **No-Flicker Session Restoration**: Remembers logged-in users and transitions immediately to the front screen without flashing the login screen.
 - **Clean Profile Customization**: Tap your name on the front screen to edit your display name. Phone numbers and email addresses remain hidden for privacy.
 - **One-Time Welcome Prompt**: Brand new accounts are automatically prompted once for their name.
 
-### 8. Export & Sharing
+### 9. Export & Sharing
 - **CSV Export**: Export any active or historical monthly ledger to CSV format with a complete mathematical summary.
 
 ---

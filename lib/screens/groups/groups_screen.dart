@@ -9,6 +9,7 @@ import '../expense/expense_home_screen.dart';
 import 'create_group_screen.dart';
 import 'join_group_screen.dart';
 import '../udhaar/udhaar_screen.dart';
+import '../splitwise/splitwise_home_screen.dart';
 
 import '../../widgets/longer_hold_drag_start_listener.dart';
 export '../../widgets/longer_hold_drag_start_listener.dart';
@@ -179,6 +180,17 @@ class _GroupsScreenState extends State<GroupsScreen> {
           appBar: AppBar(
             title: const Text('Khaata'),
             actions: [
+              IconButton(
+                tooltip: 'Splitwise',
+                icon: const Icon(Icons.call_split_rounded, size: 21),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const SplitwiseHomeScreen(),
+                    ),
+                  );
+                },
+              ),
               IconButton(
                 tooltip: 'Udhaar',
                 icon: const Icon(Icons.menu_book_rounded, size: 21),

@@ -18,11 +18,15 @@ import 'package:expense_tracker/services/group_service.dart';
 import 'package:expense_tracker/screens/udhaar/udhaar_screen.dart';
 import 'package:expense_tracker/screens/udhaar/udhaar_detail_screen.dart';
 import 'package:expense_tracker/services/udhaar_service.dart';
+import 'package:expense_tracker/screens/splitwise/splitwise_home_screen.dart';
+import 'package:expense_tracker/screens/splitwise/splitwise_group_screen.dart';
+import 'package:expense_tracker/services/splitwise_service.dart';
 
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     UdhaarService.instance.clearMockData();
+    SplitwiseService.instance.clearMockData();
   });
   testWidgets('Khaata app loads phone sign-in screen initially with Google sign-in option', (WidgetTester tester) async {
     // Ensure clean logged-out state
@@ -873,6 +877,138 @@ void main() {
     await tester.pump();
     await gesture.up();
     await tester.pumpAndSettle();
+
+    await AuthService.instance.logOut();
+  });
+
+  testWidgets('Splitwise icon is beside Udhaar icon on front screen and opens SplitwiseHomeScreen', (WidgetTester tester) async {
+    await AuthService.instance.logOut();
+    await AuthService.instance.sendOtp(rawPhoneNumber: '9222211111', onCodeSent: (_) {}, onError: (_) {});
+    final user = await AuthService.instance.verifyOtpAndSignIn(smsCode: '123456', name: 'PartyHost');
+    expect(user.name, 'PartyHost');
+
+    await tester.pumpWidget(const ExpenseTrackerApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Verify Splitwise and Udhaar icons exist in AppBar
+    final splitwiseFinder = find.byTooltip('Splitwise');
+    final udhaarFinder = find.byTooltip('Udhaar');
+    final logoutFinder = find.byTooltip('Log Out');
+    expect(splitwiseFinder, findsOneWidget);
+    expect(udhaarFinder, findsOneWidget);
+    expect(logoutFinder, findsOneWidget);
+
+    // Verify Splitwise is positioned beside (to the left of) Udhaar icon
+    final splitwisePos = tester.getTopLeft(splitwiseFinder);
+    final udhaarPos = tester.getTopLeft(udhaarFinder);
+    expect(splitwisePos.dx, lessThan(udhaarPos.dx));
+
+    // Tap Splitwise icon
+    await tester.tap(splitwiseFinder);
+    await tester.pumpAndSettle();
+
+    // Verify SplitwiseHomeScreen opens with Active Parties and History tabs
+    expect(find.byType(SplitwiseHomeScreen), findsOneWidget);
+    expect(find.text('Splitwise'), findsOneWidget);
+    expect(find.text('Active Parties'), findsOneWidget);
+    expect(find.text('History'), findsOneWidget);
+
+    await AuthService.instance.logOut();
+  });
+
+  testWidgets('Splitwise: create party with date and members, add expense with paidBy & involved, see green/red net settlements, and mark done into history', (WidgetTester tester) async {
+    await AuthService.instance.logOut();
+    await AuthService.instance.sendOtp(rawPhoneNumber: '9111100000', onCodeSent: (_) {}, onError: (_) {});
+    final user = await AuthService.instance.verifyOtpAndSignIn(smsCode: '123456', name: 'PartyLead');
+    expect(user.name, 'PartyLead');
+
+    await tester.pumpWidget(const ExpenseTrackerApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Open Splitwise screen
+    await tester.tap(find.byTooltip('Splitwise'));
+    await tester.pumpAndSettle();
+
+    // Tap "New Group" button
+    await tester.tap(find.text('New Group').first);
+    await tester.pumpAndSettle();
+
+    // Enter group name: Goa Party
+    final textFields = find.byType(TextField);
+    await tester.enterText(textFields.at(0), 'Goa Party');
+
+    // Add members: Rahul and Aman
+    await tester.enterText(textFields.at(1), 'Rahul');
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+
+    final textFieldsAfterFirst = find.byType(TextField);
+    await tester.enterText(textFieldsAfterFirst.at(1), 'Aman');
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+
+    // Tap "Create Group"
+    await tester.tap(find.text('Create Group'));
+    await tester.pumpAndSettle();
+
+    // Verify SplitwiseGroupScreen is open
+    expect(find.byType(SplitwiseGroupScreen), findsOneWidget);
+    expect(find.text('Goa Party'), findsOneWidget);
+    expect(find.text('Rahul'), findsWidgets);
+    expect(find.text('Aman'), findsWidgets);
+
+    // Initial settlements: both are Settled (₹0)
+    expect(find.text('Settled (₹0)'), findsNWidgets(2));
+
+    // Tap "+ Add Expense" FAB at bottom right
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+
+    // Enter Amount: 1000, Description: Dinner
+    final expTextFields = find.byType(TextField);
+    await tester.enterText(expTextFields.at(0), '1000');
+    await tester.enterText(expTextFields.at(1), 'Seafood Dinner');
+    await tester.pumpAndSettle();
+
+    // Rahul is default payer, both Rahul and Aman are involved (500 each)
+    await tester.ensureVisible(find.text('Save Expense'));
+    await tester.tap(find.text('Save Expense'));
+    await tester.pumpAndSettle();
+
+    // Verify net balances:
+    // Rahul paid 1000 for 2 people -> gets back ₹500 (Green)
+    // Aman paid 0 for 500 share -> owes ₹500 (Red)
+    expect(find.text('Gets back ₹500'), findsOneWidget);
+    expect(find.text('Owes ₹500'), findsOneWidget);
+
+    final getsBackWidget = tester.widget<Text>(find.text('Gets back ₹500'));
+    expect(getsBackWidget.style?.color, const Color(0xFF16A34A)); // Green
+
+    final owesWidget = tester.widget<Text>(find.text('Owes ₹500'));
+    expect(owesWidget.style?.color, const Color(0xFFDC2626)); // Red
+
+    // Mark party as done
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    // Confirm mark done
+    await tester.tap(find.text('Mark Done'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('COMPLETED'), findsOneWidget);
+
+    // Go back to Splitwise home screen
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // Tap "History" tab to verify party is stored in history
+    await tester.tap(find.text('History'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Goa Party'), findsOneWidget);
+    expect(find.text('COMPLETED'), findsOneWidget);
 
     await AuthService.instance.logOut();
   });

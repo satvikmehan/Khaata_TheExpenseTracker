@@ -15,6 +15,15 @@ service cloud.firestore {
           allow read, write: if request.auth != null && request.auth.uid == userId;
         }
       }
+
+      // Splitwise subcollection rules: only the account owner can read/write their party groups & expenses
+      match /splitwise_groups/{groupId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+
+        match /expenses/{expenseId} {
+          allow read, write: if request.auth != null && request.auth.uid == userId;
+        }
+      }
     }
     
     // Group helper function: check if authenticated user is a member of the group
