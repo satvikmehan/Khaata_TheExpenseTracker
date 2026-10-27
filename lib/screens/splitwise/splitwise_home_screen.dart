@@ -4,6 +4,7 @@ import '../../models/splitwise_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/splitwise_service.dart';
 import 'splitwise_group_screen.dart';
+import 'splitwise_history_screen.dart';
 
 class SplitwiseHomeScreen extends StatefulWidget {
   const SplitwiseHomeScreen({super.key});
@@ -12,20 +13,7 @@ class SplitwiseHomeScreen extends StatefulWidget {
   State<SplitwiseHomeScreen> createState() => _SplitwiseHomeScreenState();
 }
 
-class _SplitwiseHomeScreenState extends State<SplitwiseHomeScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
+class _SplitwiseHomeScreenState extends State<SplitwiseHomeScreen> {
 
   String _formatAmount(double amount) {
     final absAmt = amount.abs();
@@ -396,7 +384,7 @@ class _SplitwiseHomeScreenState extends State<SplitwiseHomeScreen> with SingleTi
     );
   }
 
-  Widget _buildGroupList(List<SplitwiseGroupModel> groups, {required bool isHistory}) {
+  Widget _buildGroupList(List<SplitwiseGroupModel> groups) {
     if (groups.isEmpty) {
       return Center(
         child: Padding(
@@ -408,36 +396,26 @@ class _SplitwiseHomeScreenState extends State<SplitwiseHomeScreen> with SingleTi
                 width: 68,
                 height: 68,
                 decoration: BoxDecoration(
-                  color: isHistory ? Colors.grey.shade100 : Colors.blue.shade50,
+                  color: Colors.blue.shade50,
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  isHistory ? Icons.history_outlined : Icons.call_split_rounded,
+                  Icons.call_split_rounded,
                   size: 34,
-                  color: isHistory ? Colors.grey.shade500 : Colors.blue.shade700,
+                  color: Colors.blue.shade700,
                 ),
               ),
               const SizedBox(height: 16.0),
-              Text(
-                isHistory ? 'No Completed Parties Yet' : 'No Active Splitwise Groups',
-                style: const TextStyle(fontSize: 17.0, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
+              const Text(
+                'No Active Splitwise Groups',
+                style: TextStyle(fontSize: 17.0, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
               ),
               const SizedBox(height: 8.0),
               Text(
-                isHistory
-                    ? 'When a party is finished, click "Done" inside the group to store it in History.'
-                    : 'Create a Splitwise group for a party, trip, or dinner to split expenses effortlessly.',
+                'Create a Splitwise group for a party, trip, or dinner to split expenses effortlessly.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13.0, color: Colors.grey.shade600),
               ),
-              if (!isHistory) ...[
-                const SizedBox(height: 20.0),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('New Splitwise Group'),
-                  onPressed: _showCreateGroupDialog,
-                ),
-              ],
             ],
           ),
         ),
@@ -467,21 +445,22 @@ class _SplitwiseHomeScreenState extends State<SplitwiseHomeScreen> with SingleTi
         title: const Text('Splitwise'),
         actions: [
           IconButton(
-            tooltip: 'New Group',
-            icon: const Icon(Icons.group_add_outlined, size: 22),
+            tooltip: 'History',
+            icon: const Icon(Icons.history_rounded, size: 24),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const SplitwiseHistoryScreen(),
+                ),
+              );
+            },
+          ),
+          IconButton(
+            tooltip: 'New Party',
+            icon: const Icon(Icons.group_add_outlined, size: 24),
             onPressed: _showCreateGroupDialog,
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: const Color(0xFF0F172A),
-          unselectedLabelColor: Colors.grey.shade500,
-          indicatorColor: const Color(0xFF0F172A),
-          tabs: const [
-            Tab(text: 'Active Parties'),
-            Tab(text: 'History'),
-          ],
-        ),
       ),
       body: StreamBuilder<List<SplitwiseGroupModel>>(
         stream: SplitwiseService.instance.streamGroups(currentUser.id),
@@ -489,23 +468,9 @@ class _SplitwiseHomeScreenState extends State<SplitwiseHomeScreen> with SingleTi
         builder: (context, snapshot) {
           final allGroups = snapshot.data ?? [];
           final activeGroups = allGroups.where((g) => !g.isDone).toList();
-          final historyGroups = allGroups.where((g) => g.isDone).toList();
 
-          return TabBarView(
-            controller: _tabController,
-            children: [
-              _buildGroupList(activeGroups, isHistory: false),
-              _buildGroupList(historyGroups, isHistory: true),
-            ],
-          );
+          return _buildGroupList(activeGroups);
         },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        icon: const Icon(Icons.add, size: 20),
-        label: const Text('New Group', style: TextStyle(fontWeight: FontWeight.w600)),
-        backgroundColor: const Color(0xFF0F172A),
-        foregroundColor: Colors.white,
-        onPressed: _showCreateGroupDialog,
       ),
     );
   }

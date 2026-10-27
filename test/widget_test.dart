@@ -19,6 +19,7 @@ import 'package:expense_tracker/screens/udhaar/udhaar_screen.dart';
 import 'package:expense_tracker/screens/udhaar/udhaar_detail_screen.dart';
 import 'package:expense_tracker/services/udhaar_service.dart';
 import 'package:expense_tracker/screens/splitwise/splitwise_home_screen.dart';
+import 'package:expense_tracker/screens/splitwise/splitwise_history_screen.dart';
 import 'package:expense_tracker/screens/splitwise/splitwise_group_screen.dart';
 import 'package:expense_tracker/services/splitwise_service.dart';
 
@@ -825,8 +826,12 @@ void main() {
     // Verify UdhaarDetailScreen opens with updated headings
     expect(find.byType(UdhaarDetailScreen), findsOneWidget);
     expect(find.text('YOU WILL PAY (NET)'), findsOneWidget);
-    expect(find.text('Debt Given (+)'), findsWidgets);
-    expect(find.text('Debt Taken / Received (-)'), findsWidgets);
+    expect(find.text('Debt Given (+)'), findsOneWidget);
+    expect(find.text('Debt Taken / Received (-)'), findsOneWidget);
+    // Verify action buttons (+/-) are NOT present in history/detail screen
+    expect(find.text('Received / Taken (-)'), findsNothing);
+    expect(find.byType(OutlinedButton), findsNothing);
+    expect(find.byType(ElevatedButton), findsNothing);
     expect(find.text('History of Transactions'), findsOneWidget);
     expect(find.text('Dinner split'), findsOneWidget);
     expect(find.text('Returned extra'), findsOneWidget);
@@ -908,11 +913,12 @@ void main() {
     await tester.tap(splitwiseFinder);
     await tester.pumpAndSettle();
 
-    // Verify SplitwiseHomeScreen opens with Active Parties and History tabs
+    // Verify SplitwiseHomeScreen opens with top History and New Party icons, and no bottom FAB
     expect(find.byType(SplitwiseHomeScreen), findsOneWidget);
     expect(find.text('Splitwise'), findsOneWidget);
-    expect(find.text('Active Parties'), findsOneWidget);
-    expect(find.text('History'), findsOneWidget);
+    expect(find.byTooltip('History'), findsOneWidget);
+    expect(find.byTooltip('New Party'), findsOneWidget);
+    expect(find.byType(FloatingActionButton), findsNothing);
 
     await AuthService.instance.logOut();
   });
@@ -931,8 +937,11 @@ void main() {
     await tester.tap(find.byTooltip('Splitwise'));
     await tester.pumpAndSettle();
 
-    // Tap "New Group" button
-    await tester.tap(find.text('New Group').first);
+    // Verify no bottom right FAB exists
+    expect(find.byType(FloatingActionButton), findsNothing);
+
+    // Tap top "New Party" icon
+    await tester.tap(find.byTooltip('New Party'));
     await tester.pumpAndSettle();
 
     // Enter group name: Goa Party
@@ -1003,10 +1012,11 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    // Tap "History" tab to verify party is stored in history
-    await tester.tap(find.text('History'));
+    // Tap top "History" icon to verify party is stored in history
+    await tester.tap(find.byTooltip('History'));
     await tester.pumpAndSettle();
 
+    expect(find.byType(SplitwiseHistoryScreen), findsOneWidget);
     expect(find.text('Goa Party'), findsOneWidget);
     expect(find.text('COMPLETED'), findsOneWidget);
 
